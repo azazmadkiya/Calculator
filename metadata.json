@@ -1,0 +1,6 @@
+{
+  "name": "Calculator",
+  "description": "A versatile calculator application with standard, scientific, and tip calculator features.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
