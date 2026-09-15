@@ -4,7 +4,7 @@ on:
   workflow_dispatch: # Allows manual trigger from GitHub Actions tab
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -45,16 +45,58 @@ jobs:
           KEY_PASSWORD: android123
         run: gradle :app:assembleRelease :app:bundleRelease --stacktrace --no-daemon
 
-      - name: Upload Release APK
+      - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-apk
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
 
-      - name: Upload Release AAB
+      - name: Upload Release AAB Artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-aab
           path: app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
+
+      - name: Prepare Release Assets
+        id: prepare_assets
+        run: |
+          TEMP_DIR="/tmp/release-assets"
+          mkdir -p "$TEMP_DIR"
+          
+          SAFE_REPO_NAME=$(basename "${{ github.repository }}" | tr -cd '[:alnum:]-')
+          
+          APK_FILENAME="${SAFE_REPO_NAME}-release-build-${{ github.run_number }}.apk"
+          AAB_FILENAME="${SAFE_REPO_NAME}-release-build-${{ github.run_number }}.aab"
+          
+          cp "app/build/outputs/apk/release/app-release.apk" "$TEMP_DIR/$APK_FILENAME"
+          cp "app/build/outputs/bundle/release/app-release.aab" "$TEMP_DIR/$AAB_FILENAME"
+          
+          echo "apk_path=$TEMP_DIR/$APK_FILENAME" >> "$GITHUB_OUTPUT"
+          echo "aab_path=$TEMP_DIR/$AAB_FILENAME" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RELEASE_TAG="release-build-${{ github.run_number }}-${{ github.run_attempt }}"
+          RELEASE_TITLE="Release APK & AAB Build #${{ github.run_number }}"
+          
+          cat <<EOF > /tmp/release-notes.txt
+          This is an automatically generated Release APK and AAB.
+          Built by GitHub Actions.
+          
+          * **Run Number:** ${{ github.run_number }}
+          * **Source Commit:** ${{ github.sha }}
+          
+          📦 **AAB File**: Used for uploading to the Google Play Store.
+          📱 **APK File**: Used for direct installation on Android devices.
+          EOF
+          
+          gh release create "$RELEASE_TAG" \
+            "${{ steps.prepare_assets.outputs.apk_path }}" \
+            "${{ steps.prepare_assets.outputs.aab_path }}" \
+            --title "$RELEASE_TITLE" \
+            --notes-file /tmp/release-notes.txt \
+            --target "${{ github.sha }}"
